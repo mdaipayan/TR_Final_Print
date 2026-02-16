@@ -2,30 +2,39 @@ import streamlit as st
 import fitz  # PyMuPDF
 import os
 
-st.set_page_config(page_title="PDF Signature Panel Inserter", layout="centered")
+st.set_page_config(page_title="PDF Signature & Background Inserter", layout="centered")
 
-st.title("PDF Signature Panel Inserter")
-st.write("Upload your PDF to automatically add signature panels.")
+st.title("PDF Signature Panel & Background Inserter")
+st.write("Upload your PDF. The app will automatically apply the institutional background and add the signature panels.")
 
-# Hardcode the path to the font file in your GitHub repository
+# Hardcode the paths to the files in your GitHub repository
 font_path = "times.ttf"
+bg_path = "TR background.pdf"
 
-# Streamlit file uploader (now only asks for the PDF)
+# Streamlit file uploader (asks for the PDF data)
 pdf_file = st.file_uploader("Upload PDF File", type=['pdf'])
 
 if pdf_file:
-    if st.button("Generate Signature Panels"):
+    if st.button("Generate Document"):
         
-        # Safety check: Ensure the font file was actually pushed to GitHub
-        if not os.path.exists(font_path):
-            st.error(f"Error: The font file '{font_path}' was not found in the repository. Please make sure you uploaded it to GitHub.")
+        # Safety check: Ensure the required files are in the GitHub repo
+        missing_files = []
+        if not os.path.exists(font_path): missing_files.append(font_path)
+        if not os.path.exists(bg_path): missing_files.append(bg_path)
+            
+        if missing_files:
+            st.error(f"Error: The following required files were not found in the repository: {', '.join(missing_files)}. Please upload them to GitHub.")
         else:
             with st.spinner("Processing PDF..."):
                 
-                # Open PDF directly from the uploaded bytes
+                # Open uploaded PDF and Background PDF
                 doc = fitz.open(stream=pdf_file.read(), filetype="pdf")
+                bg_doc = fitz.open(bg_path)
+                
+                # Create a completely new document for the output
+                out_doc = fitz.open()
 
-                # Define signatories: (Label, Name)
+                # Define signatories
                 prepared_by = [
                     ("Tabulation Incharge", "Mr. Daipayan Mandal"),
                     ("Tabulation Member", "Mr. Prakash Jangle"),
@@ -45,79 +54,86 @@ if pdf_file:
                 start_x_left = 50
                 start_x_right = 620
 
-                # Left column positions
                 col1_x = start_x_left
                 col2_x = start_x_left + 120
                 col3_x = start_x_left + 300
 
-                # Right column positions
                 col4_x = start_x_right
                 col5_x = start_x_right + 120
                 col6_x = start_x_right + 300
 
-                # Add to every page
-                for page in doc:
+                # Process each page
+                for i in range(len(doc)):
+                    page = doc[i]
+                    
+                    # 1. Create a new page with the exact same dimensions as the original
+                    new_page = out_doc.new_page(width=page.rect.width, height=page.rect.height)
+                    
+                    # 2. Draw the background PDF (layer 1 - bottom)
+                    # We assume the background PDF has 1 page, hence bg_doc, 0
+                    new_page.show_pdf_page(new_page.rect, bg_doc, 0)
+                    
+                    # 3. Draw the user's uploaded PDF page over the background (layer 2 - middle)
+                    new_page.show_pdf_page(new_page.rect, doc, i)
+
+                    # 4. Draw the signature panels (layer 3 - top)
                     y = start_y
 
                     # Header Row
-                    page.insert_text((col1_x, y), "Prepared by", fontname=fontname, fontsize=fontsize+1, fontfile=font_path)
-                    page.insert_text((col2_x, y), "Name", fontname=fontname, fontsize=fontsize+1, fontfile=font_path)
-                    page.insert_text((col3_x, y), "Signature", fontname=fontname, fontsize=fontsize+1, fontfile=font_path)
+                    new_page.insert_text((col1_x, y), "Prepared by", fontname=fontname, fontsize=fontsize+1, fontfile=font_path)
+                    new_page.insert_text((col2_x, y), "Name", fontname=fontname, fontsize=fontsize+1, fontfile=font_path)
+                    new_page.insert_text((col3_x, y), "Signature", fontname=fontname, fontsize=fontsize+1, fontfile=font_path)
 
-                    page.insert_text((col4_x, y), "Approved by", fontname=fontname, fontsize=fontsize+1, fontfile=font_path)
-                    page.insert_text((col5_x, y), "Name", fontname=fontname, fontsize=fontsize+1, fontfile=font_path)
-                    page.insert_text((col6_x, y), "Signature", fontname=fontname, fontsize=fontsize+1, fontfile=font_path)
+                    new_page.insert_text((col4_x, y), "Approved by", fontname=fontname, fontsize=fontsize+1, fontfile=font_path)
+                    new_page.insert_text((col5_x, y), "Name", fontname=fontname, fontsize=fontsize+1, fontfile=font_path)
+                    new_page.insert_text((col6_x, y), "Signature", fontname=fontname, fontsize=fontsize+1, fontfile=font_path)
 
                     y += line_spacing
 
                     # Prepared by section
                     for label, name in prepared_by:
-                        page.insert_text((col1_x, y), label, fontname=fontname, fontsize=fontsize, fontfile=font_path)
-                        page.insert_text((col2_x, y), name, fontname=fontname, fontsize=fontsize, fontfile=font_path)
-                        page.insert_text((col3_x, y), "__________________", fontname=fontname, fontsize=fontsize, fontfile=font_path)
+                        new_page.insert_text((col1_x, y), label, fontname=fontname, fontsize=fontsize, fontfile=font_path)
+                        new_page.insert_text((col2_x, y), name, fontname=fontname, fontsize=fontsize, fontfile=font_path)
+                        new_page.insert_text((col3_x, y), "__________________", fontname=fontname, fontsize=fontsize, fontfile=font_path)
                         y += line_spacing
 
                     # Right side (approvers)
                     y_right = start_y + line_spacing
                     for label, name in approvers:
-                        page.insert_text((col4_x, y_right), label, fontname=fontname, fontsize=fontsize, fontfile=font_path)
-                        page.insert_text((col5_x, y_right), name, fontname=fontname, fontsize=fontsize, fontfile=font_path)
-                        page.insert_text((col6_x, y_right), "__________________", fontname=fontname, fontsize=fontsize, fontfile=font_path)
+                        new_page.insert_text((col4_x, y_right), label, fontname=fontname, fontsize=fontsize, fontfile=font_path)
+                        new_page.insert_text((col5_x, y_right), name, fontname=fontname, fontsize=fontsize, fontfile=font_path)
+                        new_page.insert_text((col6_x, y_right), "__________________", fontname=fontname, fontsize=fontsize, fontfile=font_path)
                         y_right += line_spacing
 
                     # Additional Authority (Controller of Examination)
                     auth_x = start_x_left + 180
                     auth_y = max(y, y_right) + 20
-                    page.insert_text((auth_x, auth_y), "__________________________", fontname=fontname, fontsize=fontsize+1, fontfile=font_path)
+                    new_page.insert_text((auth_x, auth_y), "__________________________", fontname=fontname, fontsize=fontsize+1, fontfile=font_path)
                     auth_y += 20
-                    page.insert_text((auth_x, auth_y), "Dr. Anantkumar N. Dabhade", fontname=fontname, fontsize=fontsize+1, fontfile=font_path)
+                    new_page.insert_text((auth_x, auth_y), "Dr. Anantkumar N. Dabhade", fontname=fontname, fontsize=fontsize+1, fontfile=font_path)
                     auth_y += 10
-                    page.insert_text((auth_x+5, auth_y), "Controller of Examination", fontname=fontname, fontsize=fontsize+1, fontfile=font_path)
+                    new_page.insert_text((auth_x+5, auth_y), "Controller of Examination", fontname=fontname, fontsize=fontsize+1, fontfile=font_path)
 
                     # Additional Authority (Principal)
                     auth_x = start_x_right + 180
                     auth_y = max(y, y_right) + 20
-                    page.insert_text((auth_x, auth_y), "__________________________", fontname=fontname, fontsize=fontsize+1, fontfile=font_path)
+                    new_page.insert_text((auth_x, auth_y), "__________________________", fontname=fontname, fontsize=fontsize+1, fontfile=font_path)
                     auth_y += 20
-                    page.insert_text((auth_x, auth_y), "Dr. Avinash N. Shrikhande", fontname=fontname, fontsize=fontsize+1, fontfile=font_path)
+                    new_page.insert_text((auth_x, auth_y), "Dr. Avinash N. Shrikhande", fontname=fontname, fontsize=fontsize+1, fontfile=font_path)
                     auth_y += 10
-                    page.insert_text((auth_x+25, auth_y), "Principal", fontname=fontname, fontsize=fontsize+1, fontfile=font_path)
+                    new_page.insert_text((auth_x+25, auth_y), "Principal", fontname=fontname, fontsize=fontsize+1, fontfile=font_path)
 
                     # Add current date at bottom-left corner
                     bottom_x = 30
-                    bottom_y = page.rect.height - 30
+                    bottom_y = new_page.rect.height - 30
                     current_date = "Date: _____________" 
-                    page.insert_text((bottom_x, bottom_y), current_date, fontsize=10, fontname=fontname, fontfile=font_path)
+                    new_page.insert_text((bottom_x, bottom_y), current_date, fontsize=10, fontname=fontname, fontfile=font_path)
 
                 # Generate output bytes
-                pdf_out_bytes = doc.tobytes()
+                pdf_out_bytes = out_doc.tobytes()
 
-                st.success("PDF processed successfully! Click below to download.")
+                st.success("PDF processed successfully with background and signatures! Click below to download.")
 
                 # Streamlit Download Button
                 st.download_button(
-                    label="Download Modified PDF",
-                    data=pdf_out_bytes,
-                    file_name="signature_panel_output.pdf",
-                    mime="application/pdf"
-                )
+                    label="Download Final PDF
