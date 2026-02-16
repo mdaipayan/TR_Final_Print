@@ -134,6 +134,10 @@ if pdf_file:
 
                 st.success("PDF processed successfully with background and signatures! Click below to download.")
 
-                # Streamlit Download Button
+               # Streamlit Download Button
                 st.download_button(
-                    label="Download Final PDF
+                    label="Download Final PDF",  # <--- Make sure this line has the closing quote and comma
+                    data=pdf_out_bytes,
+                    file_name="final_document_with_background.pdf",
+                    mime="application/pdf"
+                )
