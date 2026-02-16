@@ -5,14 +5,23 @@ import os
 st.set_page_config(page_title="PDF Signature & Background Inserter", layout="centered")
 
 st.title("PDF Signature Panel & Background Inserter")
-st.write("Upload your PDF. The app will automatically apply the institutional background and add the signature panels.")
+st.write("Upload your PDF. The app will automatically apply the institutional background, insert the title, and add the signature panels.")
 
 # Hardcode the paths to the files in your GitHub repository
 font_path = "times.ttf"
 bg_path = "TR background.pdf"
 
+# --- NEW: Streamlit inputs for the Header Lines ---
+st.subheader("Header Text Configuration")
+line1 = st.text_input("Line 1 (Program Name)", value="BACHELOR OF TECHNOLOGY IN CIVIL ENGINEERING")
+line2 = st.text_input("Line 2 (Result Details)", value="RESULT GAZZETTE FIRST SEMESTER WINTER 2025 (REGULAR)")
+
+# Add a slider to let the user adjust the height of the text (Y-coordinate)
+header_y = st.slider("Vertical Position of Header Text", min_value=50, max_value=300, value=120, step=5, 
+                     help="Increase to move text down, decrease to move it up.")
+
 # Streamlit file uploader (asks for the PDF data)
-pdf_file = st.file_uploader("Upload PDF File", type=['pdf'])
+pdf_file = st.file_uploader("Upload Data PDF File", type=['pdf'])
 
 if pdf_file:
     if st.button("Generate Document"):
@@ -69,12 +78,24 @@ if pdf_file:
                     # 1. Create a new page with the exact same dimensions as the original
                     new_page = out_doc.new_page(width=page.rect.width, height=page.rect.height)
                     
+                    # Register the custom font for this page
+                    new_page.insert_font(fontname=fontname, fontfile=font_path)
+                    
                     # 2. Draw the background PDF (layer 1 - bottom)
-                    # We assume the background PDF has 1 page, hence bg_doc, 0
                     new_page.show_pdf_page(new_page.rect, bg_doc, 0)
                     
                     # 3. Draw the user's uploaded PDF page over the background (layer 2 - middle)
                     new_page.show_pdf_page(new_page.rect, doc, i)
+
+                    # --- NEW: Draw the two header lines centered on the page ---
+                    # Using insert_textbox to automatically center the text. 
+                    # 1 = center alignment (fitz.TEXT_ALIGN_CENTER)
+                    
+                    rect1 = fitz.Rect(50, header_y, new_page.rect.width - 50, header_y + 20)
+                    new_page.insert_textbox(rect1, line1, fontsize=12, fontname=fontname, align=1)
+                    
+                    rect2 = fitz.Rect(50, header_y + 20, new_page.rect.width - 50, header_y + 40)
+                    new_page.insert_textbox(rect2, line2, fontsize=12, fontname=fontname, align=1)
 
                     # 4. Draw the signature panels (layer 3 - top)
                     y = start_y
@@ -132,12 +153,12 @@ if pdf_file:
                 # Generate output bytes
                 pdf_out_bytes = out_doc.tobytes()
 
-                st.success("PDF processed successfully with background and signatures! Click below to download.")
+                st.success("PDF processed successfully with background, header, and signatures! Click below to download.")
 
-               # Streamlit Download Button
+                # Streamlit Download Button
                 st.download_button(
-                    label="Download Final PDF",  # <--- Make sure this line has the closing quote and comma
+                    label="Download Final PDF",
                     data=pdf_out_bytes,
-                    file_name="final_document_with_background.pdf",
+                    file_name="final_document_with_header_background.pdf",
                     mime="application/pdf"
                 )
